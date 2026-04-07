@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.env
+
+# Database
+*.db
+
+# Node
+frontend/node_modules/
+
+# Slides (hidden from professor)
+.slides/
+
+# Claude config
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
