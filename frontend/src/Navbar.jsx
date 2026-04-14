@@ -14,7 +14,6 @@ export default function Navbar() {
           <NavLink to="/" end className={({ isActive }) => isActive ? "active" : ""}>Home</NavLink>
           <NavLink to="/projects" className={({ isActive }) => isActive || showSubNav ? "active" : ""}>Projects</NavLink>
           <NavLink to="/ask" className={({ isActive }) => isActive ? "active" : ""}>Inquiries</NavLink>
-          <NavLink to="/admin" className={({ isActive }) => isActive ? "active" : ""}>Admin</NavLink>
         </div>
       </nav>
       <div className={`subnav ${showSubNav ? "subnav-open" : ""}`}>
