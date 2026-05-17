@@ -16,6 +16,7 @@ Architecture:
 """
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,23 +31,10 @@ from .seed import seed_demo
 
 log = logging.getLogger("seedledger")
 
-app = FastAPI(title="Seed Ledger", version="0.1.0")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Include route modules
-app.include_router(public_routes.router)
-app.include_router(admin_routes.router)
-
-
-@app.on_event("startup")
-def on_startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: create tables + auto-seed if empty. Shutdown: nothing special."""
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
@@ -55,6 +43,32 @@ def on_startup():
             seed_demo(db)
     finally:
         db.close()
+    yield
+
+
+app = FastAPI(
+    title="Seed Ledger",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
+
+# CORS: allow any origin (public API), no credentials -- the admin key goes in a custom
+# header, not a cookie, so credentialed CORS is not needed. Combining "*" origins with
+# credentials=True is invalid per the CORS spec and browsers will reject it.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include route modules
+app.include_router(public_routes.router)
+app.include_router(admin_routes.router)
 
 
 # Static frontend (serves React build)
@@ -68,10 +82,19 @@ if os.path.isdir(FRONTEND_DIR):
         name="assets",
     )
 
+    _BASE = os.path.realpath(FRONTEND_DIR)
+    _INDEX = os.path.join(_BASE, "index.html")
+
     @app.get("/{full_path:path}")
     def serve_spa(full_path: str):
-        """Serve React SPA -- all non-API routes fall through to index.html."""
-        file_path = os.path.join(FRONTEND_DIR, full_path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+        # Resolve and confine to FRONTEND_DIR. Blocks Windows absolute-path injection
+        # (os.path.join discards left arg if right is absolute) and .. traversal.
+        candidate = os.path.realpath(os.path.join(_BASE, full_path))
+        try:
+            if os.path.commonpath([_BASE, candidate]) != _BASE:
+                return FileResponse(_INDEX)
+        except ValueError:
+            return FileResponse(_INDEX)
+        if os.path.isfile(candidate):
+            return FileResponse(candidate)
+        return FileResponse(_INDEX)
